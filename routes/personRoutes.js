@@ -1,15 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const Person = require('../models/Person');
+const {jwtAuthMiddleware,generateToken} = require('../jwt');
 
-router.post('/', async (req,res) => {
+router.post('/signup', async (req,res) => {
     try{
         const data = req.body;
         const newPerson = Person(data);
         const response = await newPerson.save();
 
         console.log('Data saved', response);
-        res.status(200).json(response);
+        const payload = {
+            id: response.id,
+            username: response.username
+        }
+        const token = generateToken(payload);
+        res.status(200).json({response:response, token:token});
     }
     catch(err){
         console.log(err);
@@ -17,7 +23,44 @@ router.post('/', async (req,res) => {
     }
 });
 
-router.get('/', async (req,res) => {
+router.post('/login', async (req,res) => {
+    try{
+        const {username,password} = req.body;
+        const user = await Person.findOne({username: username});
+
+        if(!user ||! (await user.comparePassword(password))){
+            return res.status(401).json({error : 'Invalid username or password'});
+        }
+
+        const payload = {
+            id: user.id,
+            username: user.username
+        };
+
+        const token = generateToken(payload);
+        res.json({token});
+    }
+    catch(err){
+        console.log(err);
+        res.status(500).json({error: 'Interval server error'});
+    }
+})
+
+router.get('/profile',jwtAuthMiddleware, async(req,res) => {
+    try{
+        const userData = req.user;
+        const userId = userData.id;
+
+        const response = await Person.findById(userId);
+        res.status(200).json({response});
+    }
+    catch(err){
+        console.log(err);
+        res.status(500).json({error: 'Interval server error'});
+    }
+})
+
+router.get('/',jwtAuthMiddleware, async (req,res) => {
     try{
         const data = await Person.find();
         console.log('Data fetched');
